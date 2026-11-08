@@ -1,0 +1,6 @@
+{
+  "name": "VibePaper - AI Phone Wallpaper Studio",
+  "description": "Generate high-definition phone wallpapers from aesthetic vibes with 4 variations, remixing reference images, 1K/2K/4K resolution controls, and lock screen preview.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
