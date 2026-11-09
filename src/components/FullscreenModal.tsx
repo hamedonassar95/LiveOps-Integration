@@ -10,6 +10,7 @@ import {
   Share2,
   Check,
   Layers,
+  Heart,
 } from 'lucide-react';
 import { Wallpaper } from '../types.ts';
 import { LockScreenOverlay } from './LockScreenOverlay.tsx';
@@ -22,6 +23,8 @@ interface FullscreenModalProps {
   onSelectIndex: (index: number) => void;
   onRemix: (wallpaper: Wallpaper) => void;
   onOpen3DStudio?: (wallpaper: Wallpaper) => void;
+  favoriteIds?: Set<string>;
+  onToggleFavorite?: (wallpaper: Wallpaper) => void;
 }
 
 export const FullscreenModal: React.FC<FullscreenModalProps> = ({
@@ -32,9 +35,12 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
   onSelectIndex,
   onRemix,
   onOpen3DStudio,
+  favoriteIds,
+  onToggleFavorite,
 }) => {
   const [showLockScreen, setShowLockScreen] = useState<boolean>(true);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [shareSuccess, setShareSuccess] = useState<boolean>(false);
 
   // Live Video Animation State (gemini-omni-1.2-flash)
   const [isAnimatingVideo, setIsAnimatingVideo] = useState<boolean>(false);
@@ -51,6 +57,68 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
 
   const currentWallpaper = wallpapers[currentIndex] || wallpapers[0];
   const hasMultiple = wallpapers.length > 1;
+
+  const fallbackCopyToClipboard = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(
+          `VibePaper Phone Wallpaper: "${currentWallpaper.prompt}" - ${window.location.href}`
+        );
+      }
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2500);
+    } catch (err) {
+      console.error('Clipboard copy failed:', err);
+    }
+  };
+
+  const handleShare = async () => {
+    const title = 'VibePaper Phone Wallpaper';
+    const text = `Check out this AI-generated phone wallpaper: "${currentWallpaper.prompt}" (9:16)`;
+    const url = window.location.href;
+
+    if (navigator.share) {
+      try {
+        let sharedFile: File | null = null;
+        if (currentWallpaper.imageUrl.startsWith('data:image/')) {
+          try {
+            const res = await fetch(currentWallpaper.imageUrl);
+            const blob = await res.blob();
+            const file = new File([blob], 'vibepaper.png', { type: blob.type || 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              sharedFile = file;
+            }
+          } catch (e) {
+            console.warn('Could not prepare image file for sharing:', e);
+          }
+        }
+
+        if (sharedFile) {
+          await navigator.share({
+            title,
+            text,
+            files: [sharedFile],
+          });
+        } else {
+          await navigator.share({
+            title,
+            text: `${text}\n${url}`,
+            url,
+          });
+        }
+
+        setShareSuccess(true);
+        setTimeout(() => setShareSuccess(false), 2500);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('Share error, falling back to clipboard:', err);
+          fallbackCopyToClipboard();
+        }
+      }
+    } else {
+      fallbackCopyToClipboard();
+    }
+  };
 
   const handleAnimateVideo = async () => {
     setIsAnimatingVideo(true);
@@ -149,6 +217,25 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Favorite Toggle Button */}
+          {(() => {
+            const isFav = favoriteIds ? favoriteIds.has(currentWallpaper.id) : !!currentWallpaper.isFavorite;
+            return (
+              <button
+                onClick={() => onToggleFavorite?.(currentWallpaper)}
+                title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  isFav
+                    ? 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-500/25'
+                    : 'bg-neutral-900/80 text-neutral-300 border-white/10 hover:bg-neutral-800 hover:text-rose-400'
+                }`}
+              >
+                <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                <span className="hidden sm:inline">{isFav ? 'Saved' : 'Favorite'}</span>
+              </button>
+            );
+          })()}
+
           {/* Toggle Lock Screen Simulation */}
           <button
             onClick={() => setShowLockScreen(!showLockScreen)}
@@ -161,6 +248,29 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
           >
             <Smartphone className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Lock Screen</span>
+          </button>
+
+          {/* Share Button (Web Share API) */}
+          <button
+            onClick={handleShare}
+            title={shareSuccess ? 'Shared / Copied to clipboard!' : 'Share wallpaper'}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+              shareSuccess
+                ? 'bg-emerald-600 text-white border-emerald-400 shadow-lg shadow-emerald-500/25'
+                : 'bg-neutral-900/80 text-neutral-300 border-white/10 hover:bg-neutral-800 hover:text-white'
+            }`}
+          >
+            {shareSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-white" />
+                <span className="hidden sm:inline">Shared!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-violet-400" />
+                <span className="hidden sm:inline">Share</span>
+              </>
+            )}
           </button>
 
           {/* Close Modal */}
@@ -304,8 +414,43 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
           )}
         </div>
 
-        {/* Primary Action Buttons: Download & Remix */}
+        {/* Primary Action Buttons: Favorite, Download & Remix */}
         <div className="bg-neutral-950/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-2.5 sm:p-3 shadow-2xl flex items-center justify-between gap-2.5">
+          {/* Favorite Toggle Button */}
+          {(() => {
+            const isFav = favoriteIds ? favoriteIds.has(currentWallpaper.id) : !!currentWallpaper.isFavorite;
+            return (
+              <button
+                onClick={() => onToggleFavorite?.(currentWallpaper)}
+                title={isFav ? 'Remove from favorites' : 'Save to favorites'}
+                className={`w-11 h-11 rounded-2xl border flex items-center justify-center transition-all active:scale-95 shrink-0 ${
+                  isFav
+                    ? 'bg-rose-600 text-white border-rose-400 shadow-md shadow-rose-500/30'
+                    : 'bg-neutral-800/90 hover:bg-neutral-700/90 border-white/10 text-neutral-300 hover:text-rose-400'
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${isFav ? 'fill-current' : ''}`} />
+              </button>
+            );
+          })()}
+
+          {/* Share Button (Web Share API) */}
+          <button
+            onClick={handleShare}
+            title={shareSuccess ? 'Shared / Copied to clipboard!' : 'Share wallpaper'}
+            className={`w-11 h-11 rounded-2xl border flex items-center justify-center transition-all active:scale-95 shrink-0 ${
+              shareSuccess
+                ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-500/30'
+                : 'bg-neutral-800/90 hover:bg-neutral-700/90 border-white/10 text-neutral-300 hover:text-white'
+            }`}
+          >
+            {shareSuccess ? (
+              <Check className="w-5 h-5 text-white animate-bounce" />
+            ) : (
+              <Share2 className="w-5 h-5 text-violet-400" />
+            )}
+          </button>
+
           {/* Remix Button - Uses this image as reference for next batch */}
           <button
             onClick={() => onRemix(currentWallpaper)}

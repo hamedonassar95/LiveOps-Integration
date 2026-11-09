@@ -1,19 +1,23 @@
 import React from 'react';
-import { Maximize2, Download, Sparkles, Smartphone } from 'lucide-react';
+import { Maximize2, Download, Sparkles, Smartphone, Heart } from 'lucide-react';
 import { Wallpaper } from '../types.ts';
 
 interface WallpaperCardProps {
   wallpaper: Wallpaper;
   index: number;
+  isFavorite?: boolean;
   onOpenFullscreen: (index: number) => void;
   onRemix: (wallpaper: Wallpaper) => void;
+  onToggleFavorite?: (wallpaper: Wallpaper) => void;
 }
 
 export const WallpaperCard: React.FC<WallpaperCardProps> = ({
   wallpaper,
   index,
+  isFavorite = false,
   onOpenFullscreen,
   onRemix,
+  onToggleFavorite,
 }) => {
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -74,9 +78,25 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
         <span>Var #{wallpaper.variationIndex || index + 1}</span>
       </div>
 
-      {/* Top Right: Resolution / Aspect Pill */}
-      <div className="absolute top-3 right-3 z-10 flex items-center space-x-1 bg-black/50 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-md text-[10px] font-mono text-neutral-300">
-        <span>{wallpaper.imageSize || '2K'}</span>
+      {/* Top Right: Heart/Favorite & Resolution */}
+      <div className="absolute top-3 right-3 z-20 flex items-center space-x-1.5">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite?.(wallpaper);
+          }}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          className={`w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md border transition-all active:scale-90 shadow-md ${
+            isFavorite
+              ? 'bg-rose-600/90 text-white border-rose-400 shadow-rose-500/30'
+              : 'bg-black/50 hover:bg-black/80 text-white/70 hover:text-rose-400 border-white/15'
+          }`}
+        >
+          <Heart className={`w-3.5 h-3.5 transition-transform ${isFavorite ? 'fill-current scale-110 text-white' : ''}`} />
+        </button>
+        <div className="flex items-center space-x-1 bg-black/50 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-md text-[10px] font-mono text-neutral-300">
+          <span>{wallpaper.imageSize || '2K'}</span>
+        </div>
       </div>
 
       {/* Center Tap to Preview Indicator on Hover */}
@@ -88,7 +108,7 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
 
       {/* Bottom Information & Quick Action Buttons */}
       <div className="absolute bottom-0 inset-x-0 p-3 z-20 flex items-end justify-between">
-        <div className="text-left max-w-[65%]">
+        <div className="text-left max-w-[60%]">
           <span className="text-[10px] uppercase tracking-wider font-semibold text-violet-300 block">
             Tap to fullscreen
           </span>
@@ -99,6 +119,20 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
 
         {/* Quick Action Icons */}
         <div className="flex items-center space-x-1.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite?.(wallpaper);
+            }}
+            title={isFavorite ? 'Remove from favorites' : 'Save to favorites'}
+            className={`w-8 h-8 rounded-full border flex items-center justify-center backdrop-blur-md transition-all active:scale-95 shadow-md ${
+              isFavorite
+                ? 'bg-rose-600 text-white border-rose-400 shadow-rose-500/30'
+                : 'bg-neutral-900/80 hover:bg-neutral-800 border-white/20 text-white hover:text-rose-400'
+            }`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+          </button>
           <button
             onClick={handleRemixClick}
             title="Remix from this wallpaper"

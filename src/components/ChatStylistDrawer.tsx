@@ -14,6 +14,9 @@ interface ChatStylistDrawerProps {
   onApplyPrompt: (vibe: string) => void;
 }
 
+type ChatRole = 'art-director' | 'prompt-engineer' | 'minimalist-poet';
+type ChatModel = 'gemini-3.8-flash' | 'gemini-4-argon' | 'gemini-3.1-flash-lite';
+
 const STARTER_SUGGESTIONS = [
   'What are the trending cyberpunk lo-fi aesthetics right now?',
   'Suggest 3 minimalist dark phone wallpaper concepts with gold accents',
@@ -30,12 +33,14 @@ export const ChatStylistDrawer: React.FC<ChatStylistDrawerProps> = ({
       id: 'welcome',
       role: 'model',
       content:
-        'Hello! I am your AI Wallpaper Stylist & Art Director. Describe a feeling, an atmosphere, or an aesthetic trend you want, and I will craft prompt-ready vibes for your next 4 variations!',
+        'Hello! I am your Gemini Wallpaper AI Chatbot. Choose my persona and model, and I will craft prompt-ready aesthetic concepts for your phone wallpapers!',
       timestamp: Date.now(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<ChatRole>('art-director');
+  const [selectedModel, setSelectedModel] = useState<ChatModel>('gemini-3.8-flash');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,7 +72,8 @@ export const ChatStylistDrawer: React.FC<ChatStylistDrawerProps> = ({
         body: JSON.stringify({
           messages: newHistory.map((m) => ({ role: m.role, content: m.content })),
           useSearch: true,
-          model: 'gemini-3.8-flash',
+          model: selectedModel,
+          role: selectedRole,
         }),
       });
 
@@ -87,7 +93,7 @@ export const ChatStylistDrawer: React.FC<ChatStylistDrawerProps> = ({
       const errorMsg: ChatMessage = {
         id: `err_${Date.now()}`,
         role: 'model',
-        content: `Error: ${err.message || 'Could not consult AI Stylist. Please try again.'}`,
+        content: `Error: ${err.message || 'Could not consult AI Chatbot. Please try again.'}`,
         timestamp: Date.now(),
       };
       setMessages([...newHistory, errorMsg]);
@@ -98,32 +104,114 @@ export const ChatStylistDrawer: React.FC<ChatStylistDrawerProps> = ({
 
   if (!isOpen) return null;
 
+
   return (
     <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-md bg-neutral-950/95 backdrop-blur-2xl border-l border-white/10 shadow-2xl flex flex-col justify-between select-none animate-slide-left text-left">
       {/* Header */}
-      <div className="p-4 border-b border-white/10 flex items-center justify-between">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-xl bg-violet-600/30 border border-violet-500/40 flex items-center justify-center text-violet-400">
-            <Bot className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-1.5">
-              <h3 className="text-sm font-bold text-white">AI Wallpaper Stylist</h3>
-              <span className="flex items-center gap-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
-                <Globe className="w-2.5 h-2.5" /> Search Grounded
-              </span>
+      <div className="p-4 border-b border-white/10 space-y-3 bg-neutral-950/80">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-violet-600/30 border border-violet-500/40 flex items-center justify-center text-violet-400">
+              <Bot className="w-4 h-4" />
             </div>
-            <p className="text-[11px] text-neutral-400">Powered by Gemini 3.8 Flash</p>
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <h3 className="text-sm font-bold text-white">Gemini AI Studio Chatbot</h3>
+                <span className="flex items-center gap-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
+                  <Globe className="w-2.5 h-2.5" /> Search
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-400">Multi-turn dialogue & role specialization</p>
+            </div>
           </div>
+
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-neutral-900 hover:bg-neutral-800 border border-white/10 flex items-center justify-center text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-full bg-neutral-900 hover:bg-neutral-800 border border-white/10 flex items-center justify-center text-white"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {/* Model Selector Bar */}
+        <div className="flex items-center gap-1.5 pt-1 border-t border-white/5">
+          <span className="text-[10px] text-neutral-400 font-medium">Model:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedModel('gemini-3.8-flash')}
+            className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold transition-all ${
+              selectedModel === 'gemini-3.8-flash'
+                ? 'bg-violet-600 text-white'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+            }`}
+            title="General Tasks"
+          >
+            gemini-3.8-flash (General)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedModel('gemini-4-argon')}
+            className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold transition-all ${
+              selectedModel === 'gemini-4-argon'
+                ? 'bg-fuchsia-600 text-white'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+            }`}
+            title="Complex Reasoning Tasks"
+          >
+            gemini-4-argon (Complex)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedModel('gemini-3.1-flash-lite')}
+            className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold transition-all ${
+              selectedModel === 'gemini-3.1-flash-lite'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+            }`}
+            title="Fast Tasks"
+          >
+            gemini-3.1-flash-lite (Fast)
+          </button>
+        </div>
+
+        {/* Role Persona Switcher */}
+        <div className="flex items-center gap-1 p-1 bg-neutral-900/90 rounded-xl border border-white/5">
+          <button
+            type="button"
+            onClick={() => setSelectedRole('art-director')}
+            className={`flex-1 py-1 px-1.5 text-center text-[10px] font-semibold rounded-lg transition-all ${
+              selectedRole === 'art-director'
+                ? 'bg-neutral-800 text-violet-300 shadow-sm border border-white/10'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Art Director
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('prompt-engineer')}
+            className={`flex-1 py-1 px-1.5 text-center text-[10px] font-semibold rounded-lg transition-all ${
+              selectedRole === 'prompt-engineer'
+                ? 'bg-neutral-800 text-fuchsia-300 shadow-sm border border-white/10'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Prompt Engineer
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('minimalist-poet')}
+            className={`flex-1 py-1 px-1.5 text-center text-[10px] font-semibold rounded-lg transition-all ${
+              selectedRole === 'minimalist-poet'
+                ? 'bg-neutral-800 text-emerald-300 shadow-sm border border-white/10'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Minimalist Poet
+          </button>
+        </div>
       </div>
+
 
       {/* Messages Thread */}
       <div ref={scrollRef} className="flex-1 p-4 overflow-y-auto space-y-3.5 text-xs">

@@ -1,8 +1,10 @@
+import http from 'http';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
@@ -10,6 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Body parser with 50mb limit for reference images (base64)
@@ -31,6 +34,7 @@ function getGeminiClient(): GoogleGenAI {
     },
   });
 }
+
 
 // Supported models priority list
 const DEFAULT_STUDIO_MODEL = 'gemini-3-pro-image-preview';
@@ -353,29 +357,54 @@ app.post('/api/generate-ambient-music', async (req: Request, res: Response) => {
   }
 });
 
-// API: AI Wallpaper Stylist Chat (gemini-3.8-flash with Google Search grounding)
+// API: Gemini Multi-Turn Chatbot (supports gemini-4-argon, gemini-3.8-flash, gemini-3.1-flash-lite with role system instructions)
 app.post('/api/chat-stylist', async (req: Request, res: Response) => {
   try {
-    const { messages, useSearch = true, model = 'gemini-3.8-flash' } = req.body;
+    const {
+      messages,
+      useSearch = true,
+      model = 'gemini-3.8-flash',
+      role = 'art-director', // 'art-director' | 'prompt-engineer' | 'minimalist-poet'
+    } = req.body;
     const ai = getGeminiClient();
 
-    // Map conversation to contents format
+    // Map conversation history to contents format
     const contents = (messages || []).map((m: { role: string; content: string }) => ({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.content }],
     }));
 
+    // Dynamic role system instruction
+    let systemInstruction =
+      'You are the VibePaper AI Wallpaper Stylist and Art Director. You help users discover, refine, and brainstorm aesthetic phone wallpaper vibes (cyberpunk, anime, minimalist, dark botanical, synthwave, 3D abstract). Suggest 2-3 specific, prompt-ready vibes formatted cleanly. Keep answers engaging, vivid, and concise.';
+
+    if (role === 'prompt-engineer') {
+      systemInstruction =
+        'You are an Expert AI Prompt Engineer specializing in image synthesis models (Gemini Image, Imagen, Stable Diffusion). Given user vibes, output precise visual prompts engineered with photographic lighting, aspect ratio parameters (9:16), camera aperture, volumetric fog, color grading, and textures.';
+    } else if (role === 'minimalist-poet') {
+      systemInstruction =
+        'You are an Aesthetic Minimalist Curator and Poet. You describe phone wallpapers with profound poetic brevity, focusing on quiet negative space, shadows, organic materials, single light sources, and tranquil mood.';
+    }
+
+    // Tools: Google Search grounding supported on flash models
     const tools: any[] = [];
-    if (useSearch) {
+    if (useSearch && (model === 'gemini-3.8-flash' || model === 'gemini-4-argon')) {
       tools.push({ googleSearch: {} });
     }
 
+    // Supported models: gemini-4-argon (complex tasks), gemini-3.8-flash (general), gemini-3.1-flash-lite (fast)
+    const activeModel =
+      model === 'gemini-4-argon'
+        ? 'gemini-4-argon'
+        : model === 'gemini-3.1-flash-lite'
+        ? 'gemini-3.1-flash-lite'
+        : 'gemini-3.8-flash';
+
     const response = await ai.models.generateContent({
-      model: model || 'gemini-3.8-flash',
+      model: activeModel,
       contents,
       config: {
-        systemInstruction:
-          'You are the VibePaper AI Wallpaper Stylist and Art Director. You help users discover, refine, and brainstorm aesthetic wallpaper vibes (cyberpunk, anime, minimalist, dark botanical, synthwave, 3D abstract, photography styles). Suggest 2-3 specific, prompt-ready vibes they can copy or click. Keep answers engaging, vivid, and concise.',
+        systemInstruction,
         tools: tools.length > 0 ? tools : undefined,
       },
     });
@@ -383,12 +412,15 @@ app.post('/api/chat-stylist', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       text: response.text || 'Here is an inspired wallpaper vibe for you!',
+      modelUsed: activeModel,
+      roleUsed: role,
     });
   } catch (err: any) {
     console.error('Chat stylist error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to chat with AI Stylist' });
+    return res.status(500).json({ error: err.message || 'Failed to chat with Gemini Chatbot' });
   }
 });
+
 
 // API: Health / config check
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -402,6 +434,107 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// Setup WebSocket Server for Live API Voice Conversations (gemini-3.8-live)
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on('connection', async (clientWs: WebSocket) => {
+  console.log('Client connected to Live Voice API WebSocket');
+  let session: any = null;
+
+  try {
+    const ai = getGeminiClient();
+
+    session = await ai.live.connect({
+      model: 'gemini-3.8-live',
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+        },
+        systemInstruction:
+          'You are VibePaper Voice Assistant, an expert aesthetic wallpaper art director and creative companion. Talk directly, warmly, and concisely with the user in natural voice. Help them brainstorm visual vibes, colors, lighting, cyberpunk, anime, or nature concepts for phone wallpapers.',
+        outputAudioTranscription: {},
+        inputAudioTranscription: {},
+      },
+      callbacks: {
+        onmessage: (message: LiveServerMessage) => {
+          if (clientWs.readyState !== WebSocket.OPEN) return;
+
+          const content = message.serverContent;
+          if (content?.inputTranscription?.text) {
+            clientWs.send(
+              JSON.stringify({ inputTranscript: content.inputTranscription.text })
+            );
+          }
+          if (content?.outputTranscription?.text) {
+            clientWs.send(
+              JSON.stringify({ outputTranscript: content.outputTranscription.text })
+            );
+          }
+
+          for (const part of content?.modelTurn?.parts ?? []) {
+            if (part.inlineData?.data) {
+              clientWs.send(JSON.stringify({ audio: part.inlineData.data }));
+            }
+          }
+
+          if (content?.interrupted) {
+            clientWs.send(JSON.stringify({ interrupted: true }));
+          }
+
+          if (content?.turnComplete) {
+            clientWs.send(JSON.stringify({ turnComplete: true }));
+          }
+        },
+      },
+    });
+
+    clientWs.on('message', (data: any) => {
+      try {
+        const parsed = JSON.parse(data.toString());
+        if (parsed.audio && session) {
+          session.sendRealtimeInput({
+            audio: { data: parsed.audio, mimeType: 'audio/pcm;rate=16000' },
+          });
+        } else if (parsed.text && session) {
+          session.sendRealtimeInput({
+            text: parsed.text,
+          });
+        }
+      } catch (e) {
+        console.error('Error handling client WS message:', e);
+      }
+    });
+
+    clientWs.on('close', () => {
+      console.log('Client disconnected from Live Voice API');
+      if (session && typeof session.close === 'function') {
+        try {
+          session.close();
+        } catch (e) {
+          // ignore session close errors
+        }
+      }
+    });
+  } catch (err: any) {
+    console.error('Failed to initialize Live API session:', err);
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(JSON.stringify({ error: err.message || 'Live API initialization failed' }));
+      clientWs.close();
+    }
+  }
+});
+
+// Handle HTTP upgrade to WebSocket for /live path
+server.on('upgrade', (request, socket, head) => {
+  const pathname = request.url ? new URL(request.url, `http://${request.headers.host}`).pathname : '';
+  if (pathname === '/live' || pathname === '/api/live') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
+});
+
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
 
@@ -409,7 +542,7 @@ async function startServer() {
     // Development mode with Vite dev server middleware
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -422,8 +555,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Wallpaper Studio server running on http://0.0.0.0:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Wallpaper Studio server with Gemini Live running on http://0.0.0.0:${PORT}`);
   });
 }
 
@@ -431,3 +564,4 @@ startServer().catch((err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+

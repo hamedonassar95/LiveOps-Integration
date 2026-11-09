@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sparkles,
   Smartphone,
@@ -20,6 +20,10 @@ import {
   MicOff,
   Bot,
   Video,
+  Heart,
+  Trash2,
+  Github,
+  Radio,
 } from 'lucide-react';
 import { Wallpaper, WallpaperBatch, GenerationSettings, AspectRatio, ImageSize } from './types.ts';
 import { VibePresets } from './components/VibePresets.tsx';
@@ -28,6 +32,10 @@ import { BatchGrid } from './components/BatchGrid.tsx';
 import { FullscreenModal } from './components/FullscreenModal.tsx';
 import { ThreeDPhoneViewer } from './components/ThreeDPhoneViewer.tsx';
 import { ChatStylistDrawer } from './components/ChatStylistDrawer.tsx';
+import { GitHubOpenSourceHub, OpenSourceTemplate } from './components/GitHubOpenSourceHub.tsx';
+import { LiveVoiceModal } from './components/LiveVoiceModal.tsx';
+
+
 
 // 4 Initial Starter Wallpapers so the user can immediately experience the app
 const INITIAL_STARTER_WALLPAPERS: Wallpaper[] = [
@@ -108,8 +116,26 @@ export default function App() {
   // AI Stylist Chatbot Drawer
   const [showChatStylist, setShowChatStylist] = useState<boolean>(false);
 
+  // GitHub & Open Source Hub Modal
+  const [showGitHubHub, setShowGitHubHub] = useState<boolean>(false);
+
+  // Gemini 3.8 Live Voice Studio Modal
+  const [showLiveVoiceModal, setShowLiveVoiceModal] = useState<boolean>(false);
+
   // 3D Studio Showcase
   const [threeDWallpaper, setThreeDWallpaper] = useState<Wallpaper | null>(null);
+
+
+  // Handle open source template clone application
+  const handleApplyOpenSourceTemplate = (template: OpenSourceTemplate) => {
+    setVibeInput(template.vibePrompt);
+    setSettings((prev) => ({
+      ...prev,
+      aspectRatio: template.recommendedAspect,
+      imageSize: template.recommendedResolution,
+    }));
+  };
+
 
   // Handle Voice Recording for Vibe Prompt
   const toggleRecording = async () => {
@@ -172,12 +198,18 @@ export default function App() {
     }
   };
 
-  // Load history from localStorage
+  // Favorites State (Bookmarked wallpapers)
+  const [favorites, setFavorites] = useState<Wallpaper[]>([]);
+  const [historyTab, setHistoryTab] = useState<'batches' | 'favorites'>('batches');
+
+  const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
+
+  // Load history and favorites from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('vibepaper_history');
-      if (saved) {
-        const parsed: WallpaperBatch[] = JSON.parse(saved);
+      const savedHistory = localStorage.getItem('vibepaper_history');
+      if (savedHistory) {
+        const parsed: WallpaperBatch[] = JSON.parse(savedHistory);
         if (parsed.length > 0) {
           setHistoryBatches(parsed);
           // If the user already has saved batches, display the most recent one
@@ -185,8 +217,16 @@ export default function App() {
           setVibeInput(parsed[0].prompt);
         }
       }
+
+      const savedFavorites = localStorage.getItem('vibepaper_favorites');
+      if (savedFavorites) {
+        const parsedFavs: Wallpaper[] = JSON.parse(savedFavorites);
+        if (parsedFavs.length > 0) {
+          setFavorites(parsedFavs);
+        }
+      }
     } catch (e) {
-      console.warn('Failed to parse history:', e);
+      console.warn('Failed to parse history or favorites:', e);
     }
   }, []);
 
@@ -199,6 +239,25 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to save history:', e);
     }
+  };
+
+  // Toggle Favorite
+  const handleToggleFavorite = (wallpaper: Wallpaper) => {
+    setFavorites((prev) => {
+      const exists = prev.some((w) => w.id === wallpaper.id);
+      let updated: Wallpaper[];
+      if (exists) {
+        updated = prev.filter((w) => w.id !== wallpaper.id);
+      } else {
+        updated = [{ ...wallpaper, isFavorite: true }, ...prev];
+      }
+      try {
+        localStorage.setItem('vibepaper_favorites', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to save favorites:', err);
+      }
+      return updated;
+    });
   };
 
   // Main Generation Handler
@@ -312,6 +371,28 @@ export default function App() {
 
           {/* Header Action Buttons */}
           <div className="flex items-center space-x-1.5">
+            {/* GitHub & Open Source Hub */}
+            <button
+              onClick={() => setShowGitHubHub(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-neutral-900/80 hover:bg-neutral-800 border border-white/10 text-neutral-300 hover:text-white transition-colors shadow-sm"
+              title="Open Source & GitHub Hub (Clone, Templates, Dataset)"
+            >
+              <Github className="w-3.5 h-3.5 text-white" />
+              <span className="hidden sm:inline">GitHub Hub</span>
+              <span className="sm:hidden">Git</span>
+            </button>
+
+            {/* Gemini 3.8 Live Voice Studio */}
+            <button
+              onClick={() => setShowLiveVoiceModal(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-violet-600/30 to-fuchsia-600/30 hover:from-violet-600/50 hover:to-fuchsia-600/50 border border-violet-500/40 text-violet-200 transition-all shadow-sm active:scale-95"
+              title="Real-Time Voice Conversation with Gemini 3.8 Live"
+            >
+              <Radio className="w-3.5 h-3.5 text-fuchsia-400 animate-pulse" />
+              <span className="hidden sm:inline">Live Voice</span>
+              <span className="sm:hidden">Live</span>
+            </button>
+
             {/* AI Stylist Chatbot Drawer */}
             <button
               onClick={() => setShowChatStylist(true)}
@@ -321,6 +402,8 @@ export default function App() {
               <Bot className="w-3.5 h-3.5 text-violet-400" />
               <span>AI Stylist</span>
             </button>
+
+
 
             {/* 3D Phone Studio */}
             <button
@@ -332,7 +415,7 @@ export default function App() {
               <span>3D Studio</span>
             </button>
 
-            {/* History Batches Button */}
+            {/* History & Favorites Drawer Button */}
             <button
               onClick={() => setShowHistory(!showHistory)}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
@@ -342,67 +425,186 @@ export default function App() {
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Batches</span>
-              <span>({historyBatches.length})</span>
+              <span>Library</span>
+              {favorites.length > 0 && (
+                <span className="flex items-center gap-0.5 text-[10px] text-rose-300 bg-rose-500/20 border border-rose-500/30 font-bold px-1.5 py-0.2 rounded-full ml-0.5">
+                  <Heart className="w-2.5 h-2.5 fill-current text-rose-400" />
+                  {favorites.length}
+                </span>
+              )}
             </button>
           </div>
         </header>
 
-        {/* History Drawer Modal */}
+        {/* History & Favorites Drawer Modal */}
         {showHistory && (
           <div className="bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl space-y-3 animate-fade-in text-left">
+            {/* Tab Switcher Header */}
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <span className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5 text-violet-400" />
-                Previous Wallpaper Batches
-              </span>
+              <div className="flex items-center space-x-1 bg-neutral-950/80 p-1 rounded-xl border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('batches')}
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    historyTab === 'batches'
+                      ? 'bg-violet-600 text-white shadow-md'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Batches ({historyBatches.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('favorites')}
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    historyTab === 'favorites'
+                      ? 'bg-rose-600 text-white shadow-md'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <Heart
+                    className={`w-3.5 h-3.5 ${
+                      historyTab === 'favorites' ? 'fill-current' : 'text-rose-400'
+                    }`}
+                  />
+                  <span>Favorites ({favorites.length})</span>
+                </button>
+              </div>
+
               <button
                 onClick={() => setShowHistory(false)}
-                className="text-neutral-400 hover:text-white"
+                className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {historyBatches.length === 0 ? (
-              <p className="text-xs text-neutral-400 py-3 text-center">
-                No past batches yet. Generate your first wallpaper batch below!
-              </p>
-            ) : (
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                {historyBatches.map((batch) => (
-                  <div
-                    key={batch.id}
-                    onClick={() => {
-                      setCurrentBatch(batch.wallpapers);
-                      setVibeInput(batch.prompt);
-                      setShowHistory(false);
-                    }}
-                    className="p-2.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-800 border border-white/5 cursor-pointer transition-colors flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center space-x-2.5 min-w-0">
-                      {batch.wallpapers[0] && (
-                        <img
-                          src={batch.wallpapers[0].imageUrl}
-                          alt=""
-                          className="w-8 h-12 object-cover rounded-lg border border-white/10 shrink-0"
-                        />
-                      )}
-                      <div className="truncate">
-                        <p className="text-xs font-medium text-white truncate">
-                          {batch.prompt}
-                        </p>
-                        <p className="text-[10px] text-neutral-400">
-                          {batch.wallpapers.length} variations • {batch.aspectRatio} • {batch.imageSize}
-                        </p>
+            {/* Tab 1: Previous Batches */}
+            {historyTab === 'batches' && (
+              <>
+                {historyBatches.length === 0 ? (
+                  <p className="text-xs text-neutral-400 py-4 text-center">
+                    No past batches yet. Generate your first wallpaper batch below!
+                  </p>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                    {historyBatches.map((batch) => (
+                      <div
+                        key={batch.id}
+                        onClick={() => {
+                          setCurrentBatch(batch.wallpapers);
+                          setVibeInput(batch.prompt);
+                          setShowHistory(false);
+                        }}
+                        className="p-2.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-800 border border-white/5 cursor-pointer transition-colors flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          {batch.wallpapers[0] && (
+                            <img
+                              src={batch.wallpapers[0].imageUrl}
+                              alt=""
+                              className="w-8 h-12 object-cover rounded-lg border border-white/10 shrink-0"
+                            />
+                          )}
+                          <div className="truncate">
+                            <p className="text-xs font-medium text-white truncate">
+                              {batch.prompt}
+                            </p>
+                            <p className="text-[10px] text-neutral-400">
+                              {batch.wallpapers.length} variations • {batch.aspectRatio} •{' '}
+                              {batch.imageSize}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-violet-400 font-mono shrink-0">
+                          Load Batch
+                        </span>
                       </div>
-                    </div>
-                    <span className="text-[10px] text-violet-400 font-mono shrink-0">
-                      View
-                    </span>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
+            )}
+
+            {/* Tab 2: Bookmarked Favorites */}
+            {historyTab === 'favorites' && (
+              <>
+                {favorites.length === 0 ? (
+                  <div className="py-6 px-3 text-center flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-2.5">
+                      <Heart className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs font-semibold text-white">No Bookmarked Favorites Yet</p>
+                    <p className="text-[11px] text-neutral-400 max-w-xs mt-1 leading-relaxed">
+                      Tap the heart icon <Heart className="w-3 h-3 inline text-rose-400 fill-current" /> on any wallpaper in the grid to bookmark your favorite AI generations here!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                    {favorites.map((fav) => (
+                      <div
+                        key={fav.id}
+                        className="p-2.5 rounded-xl bg-neutral-800/60 border border-white/5 flex items-center justify-between gap-3 hover:border-rose-500/30 transition-colors"
+                      >
+                        <div
+                          onClick={() => {
+                            // If this wallpaper is in currentBatch, open fullscreen
+                            const idx = currentBatch.findIndex((w) => w.id === fav.id);
+                            if (idx >= 0) {
+                              setFullscreenIndex(idx);
+                            } else {
+                              setCurrentBatch([fav, ...currentBatch.filter((w) => w.id !== fav.id)]);
+                              setFullscreenIndex(0);
+                            }
+                            setIsFullscreenOpen(true);
+                            setShowHistory(false);
+                          }}
+                          className="flex items-center space-x-2.5 min-w-0 cursor-pointer flex-1"
+                        >
+                          <img
+                            src={fav.imageUrl}
+                            alt=""
+                            className="w-9 h-14 object-cover rounded-lg border border-white/10 shrink-0"
+                          />
+                          <div className="truncate">
+                            <p className="text-xs font-medium text-white truncate">
+                              {fav.prompt}
+                            </p>
+                            <p className="text-[10px] text-neutral-400 mt-0.5 flex items-center gap-1.5">
+                              <span className="font-mono">{fav.aspectRatio}</span>
+                              <span>•</span>
+                              <span className="font-mono">{fav.imageSize}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center space-x-1.5 shrink-0">
+                          <button
+                            onClick={() => {
+                              handleRemix(fav);
+                              setShowHistory(false);
+                            }}
+                            title="Remix this favorite wallpaper"
+                            className="p-1.5 rounded-lg bg-neutral-900/90 hover:bg-violet-600/90 border border-white/10 text-neutral-300 hover:text-white transition-colors"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleToggleFavorite(fav)}
+                            title="Remove from favorites"
+                            className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -564,6 +766,8 @@ export default function App() {
             onOpenFullscreen={handleOpenFullscreen}
             onRemix={handleRemix}
             currentPrompt={vibeInput}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
           />
         </section>
 
@@ -586,6 +790,8 @@ export default function App() {
           onSelectIndex={(newIdx) => setFullscreenIndex(newIdx)}
           onRemix={handleRemix}
           onOpen3DStudio={(wp) => setThreeDWallpaper(wp)}
+          favoriteIds={favoriteIds}
+          onToggleFavorite={handleToggleFavorite}
         />
       )}
 
@@ -604,6 +810,24 @@ export default function App() {
         onClose={() => setShowChatStylist(false)}
         onApplyPrompt={(vibe) => setVibeInput(vibe)}
       />
+
+      {/* GitHub & Open Source Hub Modal */}
+      <GitHubOpenSourceHub
+        isOpen={showGitHubHub}
+        onClose={() => setShowGitHubHub(false)}
+        currentBatch={currentBatch}
+        currentPrompt={vibeInput}
+        onApplyTemplate={handleApplyOpenSourceTemplate}
+      />
+
+      {/* Gemini 3.8 Live Voice Studio Modal */}
+      <LiveVoiceModal
+        isOpen={showLiveVoiceModal}
+        onClose={() => setShowLiveVoiceModal(false)}
+        onApplyPrompt={(vibe) => setVibeInput(vibe)}
+      />
     </div>
   );
 }
+
+

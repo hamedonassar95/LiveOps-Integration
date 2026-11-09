@@ -19,6 +19,7 @@ export interface Wallpaper {
   model: string;
   variationIndex: number;
   createdAt: number;
+  isFavorite?: boolean;
 }
 
 export interface WallpaperBatch {
