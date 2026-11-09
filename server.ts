@@ -5,8 +5,17 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { WebSocketServer, WebSocket } from 'ws';
+import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
+import {
+  getOrCreateUser,
+  saveWallpaperToDb,
+  getSavedWallpapersFromDb,
+  deleteSavedWallpaperFromDb,
+} from './src/db/wallpapers.ts';
 
 dotenv.config();
+
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -420,6 +429,93 @@ app.post('/api/chat-stylist', async (req: Request, res: Response) => {
     return res.status(500).json({ error: err.message || 'Failed to chat with Gemini Chatbot' });
   }
 });
+
+// Database API: Synchronize authenticated user with Cloud SQL PostgreSQL
+app.post('/api/db/user', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const email = req.user?.email || `${uid}@anonymous.vibepaper.app`;
+    if (!uid) {
+      return res.status(401).json({ error: 'User identifier not found in token' });
+    }
+
+    const userRecord = await getOrCreateUser(uid, email);
+    return res.json({ success: true, user: userRecord });
+  } catch (err: any) {
+    console.error('Failed to sync user to Cloud SQL:', err);
+    return res.status(500).json({ error: err.message || 'Failed to sync user record' });
+  }
+});
+
+// Database API: Save wallpaper to Cloud SQL PostgreSQL
+app.post('/api/db/wallpapers', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const email = req.user?.email || `${uid}@anonymous.vibepaper.app`;
+    if (!uid) {
+      return res.status(401).json({ error: 'Unauthorized user' });
+    }
+
+    const userRecord = await getOrCreateUser(uid, email);
+    const { wallpaper } = req.body;
+    if (!wallpaper || !wallpaper.imageUrl) {
+      return res.status(400).json({ error: 'Missing wallpaper data' });
+    }
+
+    const saved = await saveWallpaperToDb(userRecord.id, {
+      wallpaperId: wallpaper.id || `wp_${Date.now()}`,
+      imageUrl: wallpaper.imageUrl,
+      prompt: wallpaper.prompt || 'VibePaper aesthetic wallpaper',
+      aspectRatio: wallpaper.aspectRatio || '9:16',
+      imageSize: wallpaper.imageSize || '2K',
+      model: wallpaper.model || 'gemini-3-pro-image-preview',
+      variationIndex: wallpaper.variationIndex || 1,
+    });
+
+    return res.json({ success: true, wallpaper: saved });
+  } catch (err: any) {
+    console.error('Failed to save wallpaper to Cloud SQL:', err);
+    return res.status(500).json({ error: err.message || 'Failed to save wallpaper' });
+  }
+});
+
+// Database API: Retrieve user saved wallpapers from Cloud SQL PostgreSQL
+app.get('/api/db/wallpapers', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const email = req.user?.email || `${uid}@anonymous.vibepaper.app`;
+    if (!uid) {
+      return res.status(401).json({ error: 'Unauthorized user' });
+    }
+
+    const userRecord = await getOrCreateUser(uid, email);
+    const wallpapers = await getSavedWallpapersFromDb(userRecord.id);
+    return res.json({ success: true, wallpapers });
+  } catch (err: any) {
+    console.error('Failed to retrieve wallpapers from Cloud SQL:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch saved wallpapers' });
+  }
+});
+
+// Database API: Delete wallpaper from Cloud SQL PostgreSQL
+app.delete('/api/db/wallpapers/:wallpaperId', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = req.user?.uid;
+    const email = req.user?.email || `${uid}@anonymous.vibepaper.app`;
+    if (!uid) {
+      return res.status(401).json({ error: 'Unauthorized user' });
+    }
+
+    const userRecord = await getOrCreateUser(uid, email);
+    const { wallpaperId } = req.params;
+    await deleteSavedWallpaperFromDb(userRecord.id, wallpaperId);
+    return res.json({ success: true, wallpaperId });
+  } catch (err: any) {
+    console.error('Failed to delete wallpaper from Cloud SQL:', err);
+    return res.status(500).json({ error: err.message || 'Failed to delete saved wallpaper' });
+  }
+});
+
 
 
 // API: Health / config check
