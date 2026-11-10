@@ -24,6 +24,8 @@ import {
   Trash2,
   Github,
   Radio,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
 import { Wallpaper, WallpaperBatch, GenerationSettings, AspectRatio, ImageSize } from './types.ts';
 import { VibePresets } from './components/VibePresets.tsx';
@@ -34,6 +36,13 @@ import { ThreeDPhoneViewer } from './components/ThreeDPhoneViewer.tsx';
 import { ChatStylistDrawer } from './components/ChatStylistDrawer.tsx';
 import { GitHubOpenSourceHub, OpenSourceTemplate } from './components/GitHubOpenSourceHub.tsx';
 import { LiveVoiceModal } from './components/LiveVoiceModal.tsx';
+import { useAuth } from './context/AuthContext.tsx';
+import {
+  saveWallpaperToFirestore,
+  removeWallpaperFromFirestore,
+  subscribeToSavedWallpapers,
+} from './lib/firestore.ts';
+
 
 
 
@@ -198,13 +207,17 @@ export default function App() {
     }
   };
 
+  // Firebase Auth Context Hook
+  const { user, signInWithGoogle, logout } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
+
   // Favorites State (Bookmarked wallpapers)
   const [favorites, setFavorites] = useState<Wallpaper[]>([]);
   const [historyTab, setHistoryTab] = useState<'batches' | 'favorites'>('batches');
 
   const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
 
-  // Load history and favorites from localStorage
+  // Load history from localStorage
   useEffect(() => {
     try {
       const savedHistory = localStorage.getItem('vibepaper_history');
@@ -212,23 +225,42 @@ export default function App() {
         const parsed: WallpaperBatch[] = JSON.parse(savedHistory);
         if (parsed.length > 0) {
           setHistoryBatches(parsed);
-          // If the user already has saved batches, display the most recent one
           setCurrentBatch(parsed[0].wallpapers);
           setVibeInput(parsed[0].prompt);
         }
       }
 
-      const savedFavorites = localStorage.getItem('vibepaper_favorites');
-      if (savedFavorites) {
-        const parsedFavs: Wallpaper[] = JSON.parse(savedFavorites);
-        if (parsedFavs.length > 0) {
-          setFavorites(parsedFavs);
+      if (!user) {
+        const savedFavorites = localStorage.getItem('vibepaper_favorites');
+        if (savedFavorites) {
+          const parsedFavs: Wallpaper[] = JSON.parse(savedFavorites);
+          if (parsedFavs.length > 0) {
+            setFavorites(parsedFavs);
+          }
         }
       }
     } catch (e) {
       console.warn('Failed to parse history or favorites:', e);
     }
-  }, []);
+  }, [user]);
+
+  // Real-time Firestore sync when user is signed in
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribeToSavedWallpapers(
+      user.uid,
+      (firestoreWallpapers) => {
+        setFavorites(firestoreWallpapers);
+        localStorage.setItem('vibepaper_favorites', JSON.stringify(firestoreWallpapers));
+      },
+      (error) => {
+        console.error('Firestore listener error:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Save history to localStorage
   const saveToHistory = (newBatch: WallpaperBatch) => {
@@ -241,24 +273,39 @@ export default function App() {
     }
   };
 
-  // Toggle Favorite
-  const handleToggleFavorite = (wallpaper: Wallpaper) => {
-    setFavorites((prev) => {
-      const exists = prev.some((w) => w.id === wallpaper.id);
-      let updated: Wallpaper[];
-      if (exists) {
-        updated = prev.filter((w) => w.id !== wallpaper.id);
-      } else {
-        updated = [{ ...wallpaper, isFavorite: true }, ...prev];
+  // Toggle Favorite (syncs to Firestore if user logged in, plus localStorage)
+  const handleToggleFavorite = async (wallpaper: Wallpaper) => {
+    const exists = favorites.some((w) => w.id === wallpaper.id);
+    let updated: Wallpaper[];
+
+    if (exists) {
+      updated = favorites.filter((w) => w.id !== wallpaper.id);
+      if (user) {
+        try {
+          await removeWallpaperFromFirestore(user.uid, wallpaper.id);
+        } catch (e) {
+          console.error('Failed to remove from Firestore:', e);
+        }
       }
-      try {
-        localStorage.setItem('vibepaper_favorites', JSON.stringify(updated));
-      } catch (err) {
-        console.warn('Failed to save favorites:', err);
+    } else {
+      updated = [{ ...wallpaper, isFavorite: true }, ...favorites];
+      if (user) {
+        try {
+          await saveWallpaperToFirestore(user.uid, wallpaper);
+        } catch (e) {
+          console.error('Failed to save to Firestore:', e);
+        }
       }
-      return updated;
-    });
+    }
+
+    setFavorites(updated);
+    try {
+      localStorage.setItem('vibepaper_favorites', JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Failed to save favorites locally:', err);
+    }
   };
+
 
   // Main Generation Handler
   const handleGenerate = async (e?: React.FormEvent) => {
@@ -433,8 +480,72 @@ export default function App() {
                 </span>
               )}
             </button>
+
+            {/* Google Sign-In & User Profile Avatar */}
+            {user ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-1.5 p-1 rounded-full bg-neutral-900 border border-white/10 hover:border-violet-500/40 transition-all active:scale-95"
+                  title={user.displayName || user.email || 'User Account'}
+                >
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName || 'User'}
+                      referrerPolicy="no-referrer"
+                      className="w-7 h-7 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">
+                      {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 top-10 w-48 bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2.5 shadow-2xl z-50 animate-fade-in text-left">
+                    <div className="px-2 py-1.5 border-b border-white/10 mb-1">
+                      <p className="text-xs font-semibold text-white truncate">
+                        {user.displayName || 'Google User'}
+                      </p>
+                      <p className="text-[10px] text-neutral-400 truncate">{user.email}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logout();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-xl text-xs text-rose-400 hover:bg-rose-950/40 transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => signInWithGoogle()}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full text-xs font-semibold bg-white text-neutral-900 hover:bg-neutral-100 transition-all shadow-sm active:scale-95 shrink-0"
+                title="Sign in with Google to sync bookmarks and save to Google Drive"
+              >
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+                <span className="hidden sm:inline">Sign in</span>
+              </button>
+            )}
           </div>
         </header>
+
 
         {/* History & Favorites Drawer Modal */}
         {showHistory && (

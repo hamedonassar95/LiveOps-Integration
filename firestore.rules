@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (default deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation for User Profile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == request.auth.uid
+        && data.email is string && data.email.size() <= 256;
+    }
+
+    // Validation for Saved Wallpaper
+    function isValidSavedWallpaper(data) {
+      return data.keys().hasAll(['id', 'userId', 'imageUrl', 'prompt'])
+        && data.keys().hasOnly(['id', 'userId', 'imageUrl', 'prompt', 'aspectRatio', 'imageSize', 'model', 'variationIndex', 'createdAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.imageUrl is string && data.imageUrl.size() <= 5000000
+        && data.prompt is string && data.prompt.size() <= 4000;
+    }
+
+    // Users Collection Rule
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid;
+      allow delete: if isOwner(userId);
+
+      // User's Saved Wallpapers Subcollection
+      match /savedWallpapers/{wallpaperId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(wallpaperId) && isValidSavedWallpaper(incoming());
+        allow update: if isOwner(userId) && isValidId(wallpaperId) && isValidSavedWallpaper(incoming())
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(wallpaperId);
+      }
+    }
+  }
+}

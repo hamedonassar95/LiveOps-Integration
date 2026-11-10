@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with display metadata and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "SavedWallpaper": {
+      "title": "SavedWallpaper",
+      "description": "User saved and favorited wallpaper generation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "prompt": { "type": "string" },
+        "aspectRatio": { "type": "string" },
+        "imageSize": { "type": "string" },
+        "model": { "type": "string" },
+        "variationIndex": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "imageUrl", "prompt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile document storing basic account preferences"
+    },
+    "/users/{userId}/savedWallpapers/{wallpaperId}": {
+      "schema": { "$ref": "#/entities/SavedWallpaper" },
+      "description": "Subcollection of saved/favorited wallpapers belonging strictly to the user"
+    }
+  }
+}

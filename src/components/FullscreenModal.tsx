@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { Wallpaper } from '../types.ts';
 import { LockScreenOverlay } from './LockScreenOverlay.tsx';
+import { useAuth } from '../context/AuthContext.tsx';
+import { uploadWallpaperToGoogleDrive } from '../lib/firestore.ts';
+
 
 interface FullscreenModalProps {
   wallpapers: Wallpaper[];
@@ -52,6 +55,11 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [isPlayingMusic, setIsPlayingMusic] = useState<boolean>(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  // Google Drive Upload State
+  const [isSavingDrive, setIsSavingDrive] = useState<boolean>(false);
+  const [driveSuccess, setDriveSuccess] = useState<boolean>(false);
+
 
   if (!isOpen || !wallpapers || wallpapers.length === 0) return null;
 
@@ -146,7 +154,36 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
     }
   };
 
+  const { user, accessToken, signInWithGoogle } = useAuth();
+
+
+  const handleSaveToDrive = async () => {
+    try {
+      if (!user || !accessToken) {
+        await signInWithGoogle();
+        return;
+      }
+
+      // Explicit user confirmation before upload
+      const confirmed = window.confirm(
+        `Upload wallpaper to your Google Drive?\n\nFile: "VibePaper - ${currentWallpaper.prompt.slice(0, 40)}..."`
+      );
+      if (!confirmed) return;
+
+      setIsSavingDrive(true);
+      await uploadWallpaperToGoogleDrive(accessToken, currentWallpaper);
+      setDriveSuccess(true);
+      setTimeout(() => setDriveSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('Google Drive save error:', err);
+      alert(`Could not save to Google Drive: ${err.message || 'Please check permissions'}`);
+    } finally {
+      setIsSavingDrive(false);
+    }
+  };
+
   const handleGenerateMusic = async () => {
+
     setIsGeneratingMusic(true);
     try {
       const response = await fetch('/api/generate-ambient-music', {
@@ -451,6 +488,24 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
             )}
           </button>
 
+          {/* Google Drive Save Button */}
+          <button
+            onClick={handleSaveToDrive}
+            disabled={isSavingDrive}
+            title="Save wallpaper directly to Google Drive"
+            className="w-11 h-11 rounded-2xl border border-white/10 bg-neutral-800/90 hover:bg-neutral-700/90 text-neutral-300 hover:text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
+          >
+            {driveSuccess ? (
+              <Check className="w-5 h-5 text-emerald-400" />
+            ) : isSavingDrive ? (
+              <Sparkles className="w-5 h-5 text-amber-400 animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.71 3.5L1.15 15l3.43 6 6.55-11.5M9.73 15L6.3 21h13.12l3.43-6M22.85 15l-6.57-11.5H9.72l6.56 11.5" />
+              </svg>
+            )}
+          </button>
+
           {/* Remix Button - Uses this image as reference for next batch */}
           <button
             onClick={() => onRemix(currentWallpaper)}
@@ -459,6 +514,7 @@ export const FullscreenModal: React.FC<FullscreenModalProps> = ({
             <Sparkles className="w-4 h-4 text-violet-400 group-hover:rotate-12 transition-transform" />
             <span>Remix Vibe</span>
           </button>
+
 
           {/* Download Button */}
           <button
