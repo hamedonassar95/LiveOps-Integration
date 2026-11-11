@@ -418,15 +418,86 @@ app.post('/api/chat-stylist', async (req: Request, res: Response) => {
       },
     });
 
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const groundingChunks = (groundingMetadata?.groundingChunks || [])
+      .map((chunk: any) => {
+        if (chunk.web) {
+          return {
+            title: chunk.web.title || 'Web Source',
+            uri: chunk.web.uri || '',
+          };
+        }
+        return null;
+      })
+      .filter((c: any) => c && c.uri);
+
+    const webSearchQueries = groundingMetadata?.webSearchQueries || [];
+
     return res.json({
       success: true,
       text: response.text || 'Here is an inspired wallpaper vibe for you!',
       modelUsed: activeModel,
       roleUsed: role,
+      groundingChunks,
+      webSearchQueries,
     });
   } catch (err: any) {
     console.error('Chat stylist error:', err);
     return res.status(500).json({ error: err.message || 'Failed to chat with Gemini Chatbot' });
+  }
+});
+
+// API: Search Grounding with Google Search (gemini-3.8-flash with googleSearch tool)
+app.post('/api/search-grounded-trends', async (req: Request, res: Response) => {
+  try {
+    const { query } = req.body;
+    const ai = getGeminiClient();
+
+    const userPrompt = query && query.trim()
+      ? `Using Google Search data, find the latest real-world visual aesthetics, color palettes, textures, and accurate details for: "${query.trim()}". Return a response with:
+1. Overview: A concise 2-sentence summary of the latest real-world trend or visual aesthetics grounded in web search.
+2. Vibe Prompt: A ready-to-use, prompt-engineered 9:16 phone wallpaper prompt incorporating these factual search details (camera lighting, volumetric atmospheric depth, aesthetic colors).
+3. Key Visual Elements: 3-4 specific visual elements discovered via Google Search.`
+      : `Using Google Search data, identify the top 4 currently trending visual design and wallpaper aesthetics right now in 2026 (such as recent celestial events, seasonal shifts, architecture movements, sci-fi/cyberpunk pop culture releases, or Pantone palettes).
+For each trend, provide a concise title, a 9:16 wallpaper prompt, and why it is trending based on search data.`;
+
+    const systemInstruction =
+      'You are the VibePaper Search Grounding Intelligence Assistant. You use Google Search data to discover up-to-date, accurate, and culturally trending aesthetic details for phone wallpapers. Ground every recommendation in real web information. Avoid buzzwords and provide concrete, vivid visual descriptors.';
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction,
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const groundingChunks = (groundingMetadata?.groundingChunks || [])
+      .map((chunk: any) => {
+        if (chunk.web) {
+          return {
+            title: chunk.web.title || 'Web Source',
+            uri: chunk.web.uri || '',
+          };
+        }
+        return null;
+      })
+      .filter((c: any) => c && c.uri);
+
+    const webSearchQueries = groundingMetadata?.webSearchQueries || [];
+
+    return res.json({
+      success: true,
+      text: response.text || '',
+      groundingChunks,
+      webSearchQueries,
+      modelUsed: 'gemini-3.8-flash',
+    });
+  } catch (err: any) {
+    console.error('Search grounding error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to query Google Search Grounding' });
   }
 });
 

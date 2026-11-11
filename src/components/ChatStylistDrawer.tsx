@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Sparkles, Bot, User, Globe, ArrowRight, Loader2 } from 'lucide-react';
+import { X, Send, Sparkles, Bot, User, Globe, ArrowRight, Loader2, ExternalLink } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   content: string;
   timestamp: number;
+  groundingChunks?: { title: string; uri: string }[];
+  webSearchQueries?: string[];
 }
 
 interface ChatStylistDrawerProps {
@@ -87,6 +89,8 @@ export const ChatStylistDrawer: React.FC<ChatStylistDrawerProps> = ({
         role: 'model',
         content: data.text,
         timestamp: Date.now(),
+        groundingChunks: data.groundingChunks || [],
+        webSearchQueries: data.webSearchQueries || [],
       };
       setMessages([...newHistory, botMsg]);
     } catch (err: any) {
@@ -234,6 +238,31 @@ export const ChatStylistDrawer: React.FC<ChatStylistDrawerProps> = ({
               }`}
             >
               <p className="whitespace-pre-wrap">{msg.content}</p>
+
+              {/* Google Search Grounding Sources & Citations */}
+              {msg.groundingChunks && msg.groundingChunks.length > 0 && (
+                <div className="mt-2.5 pt-2 border-t border-white/10 text-[10px] space-y-1.5">
+                  <p className="text-neutral-400 font-semibold flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-emerald-400" />
+                    <span>Google Search Sources ({msg.groundingChunks.length})</span>
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {msg.groundingChunks.slice(0, 4).map((chunk, idx) => (
+                      <a
+                        key={idx}
+                        href={chunk.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-0.5 rounded-lg bg-neutral-800/90 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-white/10 truncate max-w-[190px] flex items-center gap-1 transition-colors"
+                        title={chunk.title}
+                      >
+                        <span className="truncate">{chunk.title}</span>
+                        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60 text-emerald-400" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* If model suggests quotes, allow user to apply immediately */}
               {msg.role === 'model' && msg.id !== 'welcome' && (

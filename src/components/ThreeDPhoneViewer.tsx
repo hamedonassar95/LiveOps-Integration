@@ -11,6 +11,9 @@ import {
   Eye,
   Sliders,
   Maximize2,
+  Camera,
+  Download,
+  Check,
 } from 'lucide-react';
 import { Wallpaper } from '../types.ts';
 
@@ -63,10 +66,33 @@ export const ThreeDPhoneViewer: React.FC<ThreeDPhoneViewerProps> = ({
   onClose,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+
   const [activeFinish, setActiveFinish] = useState<PhoneFinish>(PHONE_FINISHES[0]);
   const [isAutoRotating, setIsAutoRotating] = useState<boolean>(true);
   const [isExploded, setIsExploded] = useState<boolean>(false);
   const [lightingPreset, setLightingPreset] = useState<'studio' | 'neon' | 'golden'>('studio');
+  const [snapshotSaved, setSnapshotSaved] = useState<boolean>(false);
+
+  const handleSnapshotMockup = () => {
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+    try {
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+      const dataUrl = rendererRef.current.domElement.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `vibepaper-3d-mockup-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setSnapshotSaved(true);
+      setTimeout(() => setSnapshotSaved(false), 2500);
+    } catch (e) {
+      console.error('Snapshot failed:', e);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !mountRef.current) return;
@@ -98,6 +124,7 @@ export const ThreeDPhoneViewer: React.FC<ThreeDPhoneViewerProps> = ({
       antialias: !isSoftwareGl,
       powerPreference: 'high-performance',
       alpha: false,
+      preserveDrawingBuffer: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
@@ -109,16 +136,26 @@ export const ThreeDPhoneViewer: React.FC<ThreeDPhoneViewerProps> = ({
 
     container.appendChild(renderer.domElement);
 
+    rendererRef.current = renderer;
+    sceneRef.current = scene;
+    cameraRef.current = camera;
+
     // 2. Mandatory RoomEnvironment PMREM Setup
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
 
-    // 3. Studio 3-Point Lighting Rig
-    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x111318, 0.8);
+    // 3. Studio 3-Point Lighting Rig (Dynamic Presets)
+    const lightConfigs = {
+      studio: { key: 0xfff3e0, fill: 0x88b0ff, rim: 0xc084fc, hemiSky: 0xdbeafe, hemiGround: 0x111318 },
+      neon: { key: 0x06b6d4, fill: 0xec4899, rim: 0xa855f7, hemiSky: 0x22d3ee, hemiGround: 0x0f172a },
+      golden: { key: 0xf59e0b, fill: 0xd97706, rim: 0xfef08a, hemiSky: 0xfef3c7, hemiGround: 0x292524 },
+    }[lightingPreset];
+
+    const hemiLight = new THREE.HemisphereLight(lightConfigs.hemiSky, lightConfigs.hemiGround, 0.8);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff3e0, 2.8);
+    const keyLight = new THREE.DirectionalLight(lightConfigs.key, 2.8);
     keyLight.position.set(4.5, 7.0, 5.5);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.width = 1024;
@@ -133,11 +170,11 @@ export const ThreeDPhoneViewer: React.FC<ThreeDPhoneViewerProps> = ({
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x88b0ff, 1.4);
+    const fillLight = new THREE.DirectionalLight(lightConfigs.fill, 1.4);
     fillLight.position.set(-5.5, -1.0, 3.5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xc084fc, 2.2);
+    const rimLight = new THREE.DirectionalLight(lightConfigs.rim, 2.2);
     rimLight.position.set(0, 4.0, -5.5);
     scene.add(rimLight);
 
@@ -415,6 +452,25 @@ export const ThreeDPhoneViewer: React.FC<ThreeDPhoneViewerProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Snapshot 3D Mockup */}
+          <button
+            onClick={handleSnapshotMockup}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 hover:text-white transition-all shadow-md active:scale-95"
+            title="Download 3D device mockup snapshot PNG"
+          >
+            {snapshotSaved ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Mockup Saved</span>
+              </>
+            ) : (
+              <>
+                <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Snapshot PNG</span>
+              </>
+            )}
+          </button>
+
           {/* Exploded View Toggle */}
           <button
             onClick={() => setIsExploded(!isExploded)}
@@ -494,6 +550,30 @@ export const ThreeDPhoneViewer: React.FC<ThreeDPhoneViewerProps> = ({
                 </span>
               </button>
             ))}
+          </div>
+
+          {/* Lighting Atmosphere Selector */}
+          <div className="flex items-center justify-between text-xs text-neutral-400 pt-2 border-t border-white/10">
+            <span className="text-[11px] font-medium text-neutral-300 flex items-center gap-1">
+              <Sun className="w-3 h-3 text-amber-400" />
+              <span>Studio Lighting:</span>
+            </span>
+            <div className="flex items-center gap-1">
+              {(['studio', 'neon', 'golden'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setLightingPreset(mode)}
+                  className={`px-2.5 py-1 rounded-xl text-[10px] font-semibold transition-all ${
+                    lightingPreset === mode
+                      ? 'bg-violet-600 text-white shadow-sm'
+                      : 'bg-neutral-900 text-neutral-400 hover:text-neutral-200 border border-white/5'
+                  }`}
+                >
+                  {mode === 'studio' ? 'White PBR' : mode === 'neon' ? 'Cyber Neon' : 'Golden Hour'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

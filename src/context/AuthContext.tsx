@@ -12,6 +12,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   accessToken: string | null;
+  getIdToken: () => Promise<string | null>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
   accessToken: null,
+  getIdToken: async () => null,
   signInWithGoogle: async () => {},
   logout: async () => {},
 });
@@ -60,12 +62,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAccessToken(null);
   };
 
+  const getIdToken = async (): Promise<string | null> => {
+    if (!user) return null;
+    try {
+      return await user.getIdToken();
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isLoading,
         accessToken,
+        getIdToken,
         signInWithGoogle,
         logout,
       }}

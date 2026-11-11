@@ -26,7 +26,10 @@ import {
   Radio,
   LogOut,
   User as UserIcon,
+  FileText,
+  Globe,
 } from 'lucide-react';
+
 import { Wallpaper, WallpaperBatch, GenerationSettings, AspectRatio, ImageSize } from './types.ts';
 import { VibePresets } from './components/VibePresets.tsx';
 import { GenerationSettingsBar } from './components/GenerationSettingsBar.tsx';
@@ -36,12 +39,16 @@ import { ThreeDPhoneViewer } from './components/ThreeDPhoneViewer.tsx';
 import { ChatStylistDrawer } from './components/ChatStylistDrawer.tsx';
 import { GitHubOpenSourceHub, OpenSourceTemplate } from './components/GitHubOpenSourceHub.tsx';
 import { LiveVoiceModal } from './components/LiveVoiceModal.tsx';
+import { GoogleFormsModal } from './components/GoogleFormsModal.tsx';
+import { HistoryDrawer } from './components/HistoryDrawer.tsx';
+import { SearchGroundingModal } from './components/SearchGroundingModal.tsx';
 import { useAuth } from './context/AuthContext.tsx';
 import {
   saveWallpaperToFirestore,
   removeWallpaperFromFirestore,
   subscribeToSavedWallpapers,
 } from './lib/firestore.ts';
+
 
 
 
@@ -94,10 +101,110 @@ const INITIAL_STARTER_WALLPAPERS: Wallpaper[] = [
   },
 ];
 
+// Initial starter batches grouped across multiple days so the visual calendar & timeline are immediately functional
+const INITIAL_STARTER_BATCHES: WallpaperBatch[] = [
+  {
+    id: 'starter_batch_today',
+    prompt: 'rainy cyberpunk lo-fi alley with neon reflections, moody purple and cyan ambient glow',
+    aspectRatio: '9:16',
+    imageSize: '2K',
+    model: 'gemini-3-pro-image-preview',
+    wallpapers: INITIAL_STARTER_WALLPAPERS,
+    createdAt: Date.now() - 3600000, // Today
+  },
+  {
+    id: 'starter_batch_yesterday',
+    prompt: 'minimalist misty pine mountain forest in golden dawn light',
+    aspectRatio: '9:16',
+    imageSize: '2K',
+    model: 'gemini-3-pro-image-preview',
+    wallpapers: [
+      {
+        id: 'starter_y1',
+        imageUrl:
+          'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1080&q=80',
+        prompt: 'minimalist misty pine mountain forest in golden dawn light',
+        aspectRatio: '9:16',
+        imageSize: '2K',
+        model: 'gemini-3-pro-image-preview',
+        variationIndex: 1,
+        createdAt: Date.now() - 86400000,
+      },
+      {
+        id: 'starter_y2',
+        imageUrl:
+          'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1080&q=80',
+        prompt: 'ethereal green alpine peak with soft drifting clouds',
+        aspectRatio: '9:16',
+        imageSize: '2K',
+        model: 'gemini-3-pro-image-preview',
+        variationIndex: 2,
+        createdAt: Date.now() - 86400000,
+      },
+      {
+        id: 'starter_y3',
+        imageUrl:
+          'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1080&q=80',
+        prompt: 'sunlight streaming through misty redwood forest canopy',
+        aspectRatio: '9:16',
+        imageSize: '2K',
+        model: 'gemini-3-pro-image-preview',
+        variationIndex: 3,
+        createdAt: Date.now() - 86400000,
+      },
+      {
+        id: 'starter_y4',
+        imageUrl:
+          'https://images.unsplash.com/photo-1511497584788-87676104235f?auto=format&fit=crop&w=1080&q=80',
+        prompt: 'calm twilight lake reflection with silhouetted conifers',
+        aspectRatio: '9:16',
+        imageSize: '2K',
+        model: 'gemini-3-pro-image-preview',
+        variationIndex: 4,
+        createdAt: Date.now() - 86400000,
+      },
+    ],
+    createdAt: Date.now() - 86400000, // Yesterday
+  },
+  {
+    id: 'starter_batch_prev',
+    prompt: 'synthwave retro grid road into an 80s neon chrome sunset',
+    aspectRatio: '9:16',
+    imageSize: '2K',
+    model: 'gemini-3-pro-image-preview',
+    wallpapers: [
+      {
+        id: 'starter_p1',
+        imageUrl:
+          'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1080&q=80',
+        prompt: 'synthwave retro grid road into an 80s neon chrome sunset',
+        aspectRatio: '9:16',
+        imageSize: '2K',
+        model: 'gemini-3-pro-image-preview',
+        variationIndex: 1,
+        createdAt: Date.now() - 86400000 * 3,
+      },
+      {
+        id: 'starter_p2',
+        imageUrl:
+          'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1080&q=80',
+        prompt: 'magenta and cyan wireframe landscape with digital glowing grid',
+        aspectRatio: '9:16',
+        imageSize: '2K',
+        model: 'gemini-3-pro-image-preview',
+        variationIndex: 2,
+        createdAt: Date.now() - 86400000 * 3,
+      },
+    ],
+    createdAt: Date.now() - 86400000 * 3, // 3 days ago
+  },
+];
+
 export default function App() {
   const [vibeInput, setVibeInput] = useState<string>('rainy cyberpunk lo-fi');
   const [currentBatch, setCurrentBatch] = useState<Wallpaper[]>(INITIAL_STARTER_WALLPAPERS);
-  const [historyBatches, setHistoryBatches] = useState<WallpaperBatch[]>([]);
+  const [historyBatches, setHistoryBatches] = useState<WallpaperBatch[]>(INITIAL_STARTER_BATCHES);
+  const [activeBatchId, setActiveBatchId] = useState<string>('starter_batch_today');
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -131,8 +238,15 @@ export default function App() {
   // Gemini 3.8 Live Voice Studio Modal
   const [showLiveVoiceModal, setShowLiveVoiceModal] = useState<boolean>(false);
 
+  // Google Forms Workspace Modal
+  const [showGoogleFormsModal, setShowGoogleFormsModal] = useState<boolean>(false);
+
+  // Google Search Grounding Studio Modal (gemini-3.8-flash with googleSearch)
+  const [showSearchGrounding, setShowSearchGrounding] = useState<boolean>(false);
+
   // 3D Studio Showcase
   const [threeDWallpaper, setThreeDWallpaper] = useState<Wallpaper | null>(null);
+
 
 
   // Handle open source template clone application
@@ -208,16 +322,37 @@ export default function App() {
   };
 
   // Firebase Auth Context Hook
-  const { user, signInWithGoogle, logout } = useAuth();
+  const { user, signInWithGoogle, logout, getIdToken } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
 
   // Favorites State (Bookmarked wallpapers)
   const [favorites, setFavorites] = useState<Wallpaper[]>([]);
-  const [historyTab, setHistoryTab] = useState<'batches' | 'favorites'>('batches');
 
   const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
 
-  // Load history from localStorage
+  // Synchronize authenticated user with Cloud SQL PostgreSQL backend
+  useEffect(() => {
+    if (!user) return;
+    const syncUserToCloudSql = async () => {
+      try {
+        const token = await getIdToken();
+        if (token) {
+          await fetch('/api/db/user', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('Silent Cloud SQL sync:', err);
+      }
+    };
+    syncUserToCloudSql();
+  }, [user, getIdToken]);
+
+  // Load history from localStorage or fallback to multi-day starter batches
   useEffect(() => {
     try {
       const savedHistory = localStorage.getItem('vibepaper_history');
@@ -225,9 +360,14 @@ export default function App() {
         const parsed: WallpaperBatch[] = JSON.parse(savedHistory);
         if (parsed.length > 0) {
           setHistoryBatches(parsed);
+          setActiveBatchId(parsed[0].id);
           setCurrentBatch(parsed[0].wallpapers);
           setVibeInput(parsed[0].prompt);
+        } else {
+          setHistoryBatches(INITIAL_STARTER_BATCHES);
         }
+      } else {
+        setHistoryBatches(INITIAL_STARTER_BATCHES);
       }
 
       if (!user) {
@@ -273,7 +413,42 @@ export default function App() {
     }
   };
 
-  // Toggle Favorite (syncs to Firestore if user logged in, plus localStorage)
+  // Select batch from History / Library
+  const handleSelectBatch = (batch: WallpaperBatch) => {
+    setActiveBatchId(batch.id);
+    setCurrentBatch(batch.wallpapers);
+    setVibeInput(batch.prompt);
+    setSettings((prev) => ({
+      ...prev,
+      aspectRatio: batch.aspectRatio,
+      imageSize: batch.imageSize,
+    }));
+  };
+
+  // Delete batch from History
+  const handleDeleteBatch = (batchId: string) => {
+    const updated = historyBatches.filter((b) => b.id !== batchId);
+    setHistoryBatches(updated);
+    try {
+      localStorage.setItem('vibepaper_history', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to delete history batch:', e);
+    }
+  };
+
+  // Open favorite wallpaper in fullscreen
+  const handleOpenFavoriteFullscreen = (wallpaper: Wallpaper) => {
+    const idx = currentBatch.findIndex((w) => w.id === wallpaper.id);
+    if (idx >= 0) {
+      setFullscreenIndex(idx);
+    } else {
+      setCurrentBatch([wallpaper, ...currentBatch.filter((w) => w.id !== wallpaper.id)]);
+      setFullscreenIndex(0);
+    }
+    setIsFullscreenOpen(true);
+  };
+
+  // Toggle Favorite (syncs to Firestore & Cloud SQL if user logged in, plus localStorage)
   const handleToggleFavorite = async (wallpaper: Wallpaper) => {
     const exists = favorites.some((w) => w.id === wallpaper.id);
     let updated: Wallpaper[];
@@ -283,8 +458,15 @@ export default function App() {
       if (user) {
         try {
           await removeWallpaperFromFirestore(user.uid, wallpaper.id);
+          const token = await getIdToken();
+          if (token) {
+            await fetch(`/api/db/wallpapers/${encodeURIComponent(wallpaper.id)}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          }
         } catch (e) {
-          console.error('Failed to remove from Firestore:', e);
+          console.error('Failed to remove from storage:', e);
         }
       }
     } else {
@@ -292,8 +474,19 @@ export default function App() {
       if (user) {
         try {
           await saveWallpaperToFirestore(user.uid, wallpaper);
+          const token = await getIdToken();
+          if (token) {
+            await fetch('/api/db/wallpapers', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ wallpaper }),
+            });
+          }
         } catch (e) {
-          console.error('Failed to save to Firestore:', e);
+          console.error('Failed to save to storage:', e);
         }
       }
     }
@@ -349,6 +542,7 @@ export default function App() {
           createdAt: Date.now(),
         };
 
+        setActiveBatchId(newBatch.id);
         saveToHistory(newBatch);
       } else {
         throw new Error('No wallpaper variations were returned by the AI service.');
@@ -440,6 +634,17 @@ export default function App() {
               <span className="sm:hidden">Live</span>
             </button>
 
+            {/* Google Search Grounding (gemini-3.8-flash) */}
+            <button
+              onClick={() => setShowSearchGrounding(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 transition-colors shadow-sm"
+              title="Google Search Grounding (gemini-3.8-flash with googleSearch)"
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Search Grounding</span>
+              <span className="sm:hidden">Search</span>
+            </button>
+
             {/* AI Stylist Chatbot Drawer */}
             <button
               onClick={() => setShowChatStylist(true)}
@@ -452,6 +657,16 @@ export default function App() {
 
 
 
+            {/* Google Forms Survey Button */}
+            <button
+              onClick={() => setShowGoogleFormsModal(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-neutral-900/80 hover:bg-neutral-800 border border-white/10 text-neutral-300 hover:text-white transition-colors"
+              title="Google Forms - Wallpaper Feedback & Polls"
+            >
+              <FileText className="w-3.5 h-3.5 text-violet-400" />
+              <span className="hidden sm:inline">Forms</span>
+            </button>
+
             {/* 3D Phone Studio */}
             <button
               onClick={() => setThreeDWallpaper(currentBatch[0] || INITIAL_STARTER_WALLPAPERS[0])}
@@ -461,6 +676,7 @@ export default function App() {
               <Smartphone className="w-3.5 h-3.5" />
               <span>3D Studio</span>
             </button>
+
 
             {/* History & Favorites Drawer Button */}
             <button
@@ -547,178 +763,7 @@ export default function App() {
         </header>
 
 
-        {/* History & Favorites Drawer Modal */}
-        {showHistory && (
-          <div className="bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl space-y-3 animate-fade-in text-left">
-            {/* Tab Switcher Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <div className="flex items-center space-x-1 bg-neutral-950/80 p-1 rounded-xl border border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setHistoryTab('batches')}
-                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    historyTab === 'batches'
-                      ? 'bg-violet-600 text-white shadow-md'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  <History className="w-3.5 h-3.5" />
-                  <span>Batches ({historyBatches.length})</span>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => setHistoryTab('favorites')}
-                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    historyTab === 'favorites'
-                      ? 'bg-rose-600 text-white shadow-md'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  <Heart
-                    className={`w-3.5 h-3.5 ${
-                      historyTab === 'favorites' ? 'fill-current' : 'text-rose-400'
-                    }`}
-                  />
-                  <span>Favorites ({favorites.length})</span>
-                </button>
-              </div>
-
-              <button
-                onClick={() => setShowHistory(false)}
-                className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Tab 1: Previous Batches */}
-            {historyTab === 'batches' && (
-              <>
-                {historyBatches.length === 0 ? (
-                  <p className="text-xs text-neutral-400 py-4 text-center">
-                    No past batches yet. Generate your first wallpaper batch below!
-                  </p>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                    {historyBatches.map((batch) => (
-                      <div
-                        key={batch.id}
-                        onClick={() => {
-                          setCurrentBatch(batch.wallpapers);
-                          setVibeInput(batch.prompt);
-                          setShowHistory(false);
-                        }}
-                        className="p-2.5 rounded-xl bg-neutral-800/60 hover:bg-neutral-800 border border-white/5 cursor-pointer transition-colors flex items-center justify-between gap-3"
-                      >
-                        <div className="flex items-center space-x-2.5 min-w-0">
-                          {batch.wallpapers[0] && (
-                            <img
-                              src={batch.wallpapers[0].imageUrl}
-                              alt=""
-                              className="w-8 h-12 object-cover rounded-lg border border-white/10 shrink-0"
-                            />
-                          )}
-                          <div className="truncate">
-                            <p className="text-xs font-medium text-white truncate">
-                              {batch.prompt}
-                            </p>
-                            <p className="text-[10px] text-neutral-400">
-                              {batch.wallpapers.length} variations • {batch.aspectRatio} •{' '}
-                              {batch.imageSize}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-violet-400 font-mono shrink-0">
-                          Load Batch
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Tab 2: Bookmarked Favorites */}
-            {historyTab === 'favorites' && (
-              <>
-                {favorites.length === 0 ? (
-                  <div className="py-6 px-3 text-center flex flex-col items-center">
-                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-2.5">
-                      <Heart className="w-6 h-6" />
-                    </div>
-                    <p className="text-xs font-semibold text-white">No Bookmarked Favorites Yet</p>
-                    <p className="text-[11px] text-neutral-400 max-w-xs mt-1 leading-relaxed">
-                      Tap the heart icon <Heart className="w-3 h-3 inline text-rose-400 fill-current" /> on any wallpaper in the grid to bookmark your favorite AI generations here!
-                    </p>
-                  </div>
-                ) : (
-                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                    {favorites.map((fav) => (
-                      <div
-                        key={fav.id}
-                        className="p-2.5 rounded-xl bg-neutral-800/60 border border-white/5 flex items-center justify-between gap-3 hover:border-rose-500/30 transition-colors"
-                      >
-                        <div
-                          onClick={() => {
-                            // If this wallpaper is in currentBatch, open fullscreen
-                            const idx = currentBatch.findIndex((w) => w.id === fav.id);
-                            if (idx >= 0) {
-                              setFullscreenIndex(idx);
-                            } else {
-                              setCurrentBatch([fav, ...currentBatch.filter((w) => w.id !== fav.id)]);
-                              setFullscreenIndex(0);
-                            }
-                            setIsFullscreenOpen(true);
-                            setShowHistory(false);
-                          }}
-                          className="flex items-center space-x-2.5 min-w-0 cursor-pointer flex-1"
-                        >
-                          <img
-                            src={fav.imageUrl}
-                            alt=""
-                            className="w-9 h-14 object-cover rounded-lg border border-white/10 shrink-0"
-                          />
-                          <div className="truncate">
-                            <p className="text-xs font-medium text-white truncate">
-                              {fav.prompt}
-                            </p>
-                            <p className="text-[10px] text-neutral-400 mt-0.5 flex items-center gap-1.5">
-                              <span className="font-mono">{fav.aspectRatio}</span>
-                              <span>•</span>
-                              <span className="font-mono">{fav.imageSize}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center space-x-1.5 shrink-0">
-                          <button
-                            onClick={() => {
-                              handleRemix(fav);
-                              setShowHistory(false);
-                            }}
-                            title="Remix this favorite wallpaper"
-                            className="p-1.5 rounded-lg bg-neutral-900/90 hover:bg-violet-600/90 border border-white/10 text-neutral-300 hover:text-white transition-colors"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleFavorite(fav)}
-                            title="Remove from favorites"
-                            className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
 
         {/* Remix Reference Active Banner */}
         {referenceWallpaper && (
@@ -773,8 +818,18 @@ export default function App() {
                 placeholder="e.g. rainy cyberpunk lo-fi, minimalist neon forest, pastel anime sunset..."
                 rows={2}
                 disabled={isLoading}
-                className="w-full bg-neutral-950/80 border border-white/15 focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 rounded-2xl p-3 pr-12 text-sm text-white placeholder-neutral-500 resize-none outline-none transition-all"
+                className="w-full bg-neutral-950/80 border border-white/15 focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 rounded-2xl p-3 pr-20 text-sm text-white placeholder-neutral-500 resize-none outline-none transition-all"
               />
+
+              {/* Google Search Grounding Button (gemini-3.8-flash with googleSearch) */}
+              <button
+                type="button"
+                onClick={() => setShowSearchGrounding(true)}
+                title="Ground with Google Search data (gemini-3.8-flash)"
+                className="absolute right-12 bottom-3.5 p-2 rounded-xl bg-neutral-800/80 hover:bg-emerald-950/60 border border-white/10 hover:border-emerald-500/40 text-neutral-300 hover:text-emerald-300 transition-all"
+              >
+                <Globe className="w-4 h-4 text-emerald-400" />
+              </button>
 
               {/* Speech-to-Text Microphone Button (gemini-3.5-transcribe) */}
               <button
@@ -937,8 +992,45 @@ export default function App() {
         onClose={() => setShowLiveVoiceModal(false)}
         onApplyPrompt={(vibe) => setVibeInput(vibe)}
       />
+
+      {/* Google Forms Modal */}
+      <GoogleFormsModal
+        isOpen={showGoogleFormsModal}
+        onClose={() => setShowGoogleFormsModal(false)}
+        currentPrompt={vibeInput}
+      />
+
+      {/* History & Library Drawer (with Visual Calendar & Date-Grouped Timeline) */}
+      <HistoryDrawer
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        batches={historyBatches}
+        favorites={favorites}
+        onSelectBatch={handleSelectBatch}
+        onDeleteBatch={handleDeleteBatch}
+        onOpenWallpaperFullscreen={handleOpenFavoriteFullscreen}
+        onRemixWallpaper={handleRemix}
+        onToggleFavorite={handleToggleFavorite}
+        activeBatchId={activeBatchId}
+      />
+
+      {/* Google Search Grounding Studio Modal (gemini-3.8-flash with googleSearch) */}
+      <SearchGroundingModal
+        isOpen={showSearchGrounding}
+        onClose={() => setShowSearchGrounding(false)}
+        currentPrompt={vibeInput}
+        onApplyPrompt={(prompt, autoGenerate) => {
+          setVibeInput(prompt);
+          if (autoGenerate) {
+            setTimeout(() => {
+              handleGenerate();
+            }, 100);
+          }
+        }}
+      />
     </div>
   );
 }
+
 
 

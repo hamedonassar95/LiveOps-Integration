@@ -1,6 +1,0 @@
-{
-  "summary":  "Implementation plan for Firebase Authentication and Cloud Firestore data persistence in VibePaper, enabling Google Sign-In with user avatar in top bar and live real-time bookmark synchronization.",
-  "updatedAt":  "2026-11-09T23:04:14.452465935Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}
