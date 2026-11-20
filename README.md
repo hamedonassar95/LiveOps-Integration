@@ -4,6 +4,12 @@
 واجهة React وVite في المتصفح وخادم Express في الخلفية. يبقى هذا المشروع منفصلًا
 عن Devobs؛ التكامل الاختياري مع Devobs مخصص لمراقبة نتائج CI فقط.
 
+## Local Graphify index (opt-in, offline)
+
+A read-only local code index for this repository is documented in
+[docs/graphify-local.md](docs/graphify-local.md). No source is uploaded and no
+CI, deployment or permission setting is changed.
+
 ## ما هو موجود الآن
 
 - توليد حتى أربع تنويعات للخلفية، مع اختيار نسبة الأبعاد والدقة.
